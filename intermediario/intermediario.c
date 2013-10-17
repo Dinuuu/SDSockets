@@ -1,6 +1,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <malloc.h>
@@ -30,11 +31,21 @@ void imprimir_tema(const tema* tema);
 lista_temas* inicializar_temas(const char* archivo);
 tema* crear_tema(const char* tematica);
 int agregar_tema(lista_temas* temas, const char* tematica);
+void traza_estado(const char *mensaje, const char* port);
+tema* buscarTema(char* tema, lista_temas * listaTemas);
+int procesarNotificacion(notif notificacion, lista_temas* listaTemas);
+int procesarBaja(char* tematica, lista_temas * listaTemas);
+int procesarAlta(char* tematica, lista_temas* listaTemas);
+int procesarMensaje(char* tematica, char* mensaje, lista_temas* listaTemas);
 
-void traza_estado(const char *mensaje) {
+void traza_estado(const char *mensaje, const char* port) {
 	printf("\n------------------- %s --------------------\n", mensaje);
 	system("netstat -at | head -2 | tail -1");
-	system("netstat -at | grep 56789");
+	char comando[30];
+	strcpy(comando, "netstat -at | grep ");
+	strcat(comando, port);
+	system(comando);
+//	system("netstat -at | grep 56789");
 	printf("---------------------------------------------------------\n\n");
 }
 
@@ -96,7 +107,15 @@ tema* crear_tema(const char* tematica) {
 	resp->tema[i] = '\0';
 	return resp;
 }
-
+tema* buscarTema(char* tema, lista_temas * listaTemas) {
+	int i = 0;
+	for (i = 0; i < listaTemas->cant_temas; i++) {
+		if (strcmp(listaTemas->temas[i]->tema, tema) == 0) {
+			return listaTemas->temas[i];
+		}
+	}
+	return NULL ;
+}
 void imprimir_temas(const lista_temas* temas) {
 	int i = 0;
 	printf("Hay %d temas disponibles \n", temas->cant_temas);
@@ -111,16 +130,72 @@ void imprimir_tema(const tema* tema) {
 
 }
 
+int procesarNotificacion(notif notificacion, lista_temas* listaTemas) {
+
+	switch (notificacion->opt) {
+	case BAJA:
+		return procesarBaja(notificacion->tema, listaTemas);
+	case ALTA:
+		return procesarAlta(notificacion->tema, listaTemas);
+
+	case MENSAJE:
+		return procesarMensaje(notificacion->tema, notificacion->mensaje,
+				listaTemas);
+	}
+	return -1;
+}
+
+int procesarBaja(char* tematica, lista_temas * listaTemas) {
+
+	int i = 0;
+	tema * temaBus = buscarTema(tematica, listaTemas);
+	if (temaBus == NULL )
+		return -1;
+	for (i = 0; i < temaBus->cantSuscript; i++) {
+		//TODO BUSCAR SUSCRIPTOR SI NO EXISTE DEVOLVER ERROR;
+		temaBus->cantSuscript--;
+	}
+
+	return -1;
+}
+
+int procesarAlta(char* tematica, lista_temas* listaTemas) {
+
+	tema* temaBus = buscarTema(tematica, listaTemas);
+	if (temaBus == NULL )
+		return -1;
+	int cantSus = temaBus->cantSuscript;
+	if (cantSus % BLOQUE == 0)
+		temaBus->suscriptores = realloc(temaBus->suscriptores,
+				(temaBus->cantSuscript + BLOQUE) * sizeof(suscript));
+	temaBus->suscriptores[cantSus] = malloc(sizeof(suscriptor));
+	temaBus->cantSuscript += 1;
+	//TODO AGREGAR EL SUSCRIPTOR A LA LISTA
+
+	return 1;
+}
+
+int procesarMensaje(char* tematica, char* mensaje, lista_temas* listaTemas) {
+
+	tema * temaBus = buscarTema(tematica, listaTemas);
+	if (temaBus == NULL ) {
+		printf("SE RECIBIO EL TEMA %s Y NO EXISTE", tematica);
+		return -1;
+
+	}
+
+	printf("SE RECIBIO UN MENSAJE: \n TEMA: %s \n CON MENSAJE: %s \n", tematica,
+			mensaje);
+	return 1;
+
+}
+
 int main(int argc, char *argv[]) {
 	if (argc != 3) {
-		fprintf(stderr, "Uso: %s puerto fichero_temas\n", argv[0]);
+		perror("La cantidad de argumentos es invalida");
 		return 1;
 	}
 	char * port = argv[1];
-	if (setenv("PUERTO", port, 1) != 0) {
-		printf("Problemas con setenv");
-		return 0;
-	}
 	int portInt = atoi(port);
 	char* archivo = argv[2];
 	lista_temas* listaTemas = inicializar_temas(archivo);
@@ -130,7 +205,8 @@ int main(int argc, char *argv[]) {
 	unsigned int tam_dir;
 	struct sockaddr_in dir, dir_cliente;
 	char buf[TAM];
-	int opcion = 1;
+	char mensajeRsp[5];
+	int opcion = 1, resp = -1;
 	char* mensaje = NULL;
 	int mensajeLong = 0;
 
@@ -155,13 +231,13 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	if (listen(s, MAX_LISTEN) < 0) {
+	if (listen(s, 5) < 0) {
 		perror("error en listen");
 		close(s);
 		return 1;
 	}
 
-	traza_estado("Despu�s de listen");
+	traza_estado("Despu�s de listen", port);
 
 	while (1) {
 		tam_dir = sizeof(dir_cliente);
@@ -172,40 +248,32 @@ int main(int argc, char *argv[]) {
 			return 1;
 		}
 
-		traza_estado("Despu�s de accept");
+		traza_estado("Despu�s de accept", port);
 
 		while ((leido = read(s_conec, buf, TAM)) > 0) {
 
-			int i = 0;
-			for (i = 0; i < leido; i++) {
-				if (mensajeLong % BLOQUE == 0)
-					mensaje = realloc(mensaje,
-							(mensajeLong + BLOQUE) * sizeof(char));
+			mensaje = realloc(mensaje, mensajeLong + leido * sizeof(char));
 
-				mensaje[mensajeLong++] = buf[i++];
-			}
+			memcpy((void*) mensaje, (void*) buf, leido);
 
 		}
 
-		procesarMensaje(mensaje, mensajeLong);
-		//TODO HACER ESTA FUNCION
+		notif notificacion = unMarshallMsg(mensaje);
+		resp = procesarNotificacion(notificacion, listaTemas);
+		memcpy((void *) mensajeRsp, (void*) &resp, sizeof(int));
+		mensajeRsp[4] = 0;
 
-		/*	if (write(s_conec, buf, leido) < 0) {
-		 perror("error en write");
-		 close(s);
-		 close(s_conec);
-		 return 1;
-		 }
+		// TODO SE TRABA ACAAAAAAAAAAAAAA
+		if (write(s_conec, mensajeRsp, TAMANIO_RESPUESTA) < 0) {
+			perror("error en write");
+			close(s);
+			close(s_conec);
+			return 1;
+		}
 
-		 if (leido < 0) {
-		 perror("error en read");
-		 close(s);
-		 close(s_conec);
-		 return 1;
-		 }
-		 close(s_conec);
-		 traza_estado("Despu�s de close de conexi�n");
-		 */
+		close(s_conec);
+		traza_estado("Despu�s de close de conexi�n", port);
+
 	}
 
 	close(s);

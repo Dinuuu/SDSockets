@@ -15,49 +15,41 @@
 #include <string.h>
 #include <stdarg.h>
 
-intermediario* getIntermediario() {
-
-	intermediario* resp = malloc(sizeof(intermediario));
-	resp->servidor = getenv("SERVIDOR");
-	char* puerto = getenv("PUERTO");
-	resp->puerto = atoi(puerto);
-	return resp;
-}
-
 int conectarIntermediario() {
 
 	struct hostent *host_info;
-	intermediario* inter = getIntermediario();
+	char* servidor = getenv("SERVIDOR");
+	char* puerto = getenv("PUERTO");
 	struct sockaddr_in dir;
 	int s;
-	host_info = gethostbyname(inter->servidor);
+	host_info = gethostbyname(servidor);
 	memcpy(&dir.sin_addr.s_addr, host_info->h_addr, host_info->h_length);
-	dir.sin_port = htons(inter->puerto);
+	dir.sin_port = htons(atoi(puerto));
+
 	dir.sin_family = PF_INET;
 
 	if ((s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("error creando socket");
-		free(inter);
 		return -1;
 	}
 
 	if (connect(s, (struct sockaddr *) &dir, sizeof(dir)) < 0) {
 		perror("error en connect");
 		close(s);
-		free(inter);
 		return -1;
 	}
-	free(inter);
 	return s;
 }
 
 int enviarMensaje(int opt, ...) {
 
 	int longitud = 0;
-	int rpta;
+	int rpta = 0;
+	char buf[5];
 	char* mensaje = NULL;
 	int s;
 	int i;
+
 	if ((s = conectarIntermediario()) < 0) {
 		return s;
 	}
@@ -80,7 +72,7 @@ int enviarMensaje(int opt, ...) {
 	}
 	argumento = malloc(argumentos * sizeof(char*));
 	for (i = 0; i < argumentos; i++) {
-		argumento = va_arg(ap,char*);
+		argumento[i] = (char*) va_arg(ap,char*);
 	}
 
 	mensaje = marshallMsg(opt, argumento, argumentos, &longitud);
@@ -91,9 +83,13 @@ int enviarMensaje(int opt, ...) {
 		free(mensaje);
 		return -1;
 	}
+	int leido = 0;
+	if ((leido = read(s, buf, TAMANIO_RESPUESTA)) < 0) {
+		perror("Error en read de respuesta");
+	}
 
-	//TODO PREGUNTAR COMO HACER CON LA RESPUESTA!!
-
+	memcpy((void *) &rpta, (void*) buf, sizeof(int));
+	rpta = 1;
 	close(s);
 	free(mensaje);
 	return rpta;

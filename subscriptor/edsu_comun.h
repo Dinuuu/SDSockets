@@ -9,8 +9,7 @@ typedef struct intermediario {
 	int puerto;
 } intermediario;
 
-intermediario* getIntermediario();
 int conectarIntermediario();
 
 int enviarMensaje(int opt, ...);
-// TODO LLENAR ESTO
+
