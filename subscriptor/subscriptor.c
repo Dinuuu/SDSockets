@@ -45,7 +45,6 @@ int inicio_subscriptor(void (*notif_evento)(const char *, const char *),
 	}
 
 	dir.sin_addr.s_addr = INADDR_ANY;
-	//ASIGNO PUERTO 0 ;
 	dir.sin_port = 0;
 	dir.sin_family = PF_INET;
 	if (bind(s, (struct sockaddr *) &dir, sizeof(dir)) < 0) {
@@ -62,8 +61,8 @@ int inicio_subscriptor(void (*notif_evento)(const char *, const char *),
 	pthread_t threadId;
 
 	struct sockaddr_in aux;
-	int tam;
-	getsockname(s, (void *) &aux, (socklen_t *) &tam);
+	int tam = sizeof(aux);
+	getsockname(s, (void*) &aux, (socklen_t *) &tam);
 
 	puerto = ntohs(aux.sin_port);
 	pthread_create(&threadId, NULL, bucleAccept, &s);

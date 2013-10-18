@@ -166,6 +166,7 @@ int procesarBaja(char* tematica, int puerto, struct sockaddr_in * cliente,
 
 int procesarAlta(char* tematica, int puerto, struct sockaddr_in * cliente,
 		lista_temas* listaTemas) {
+
 	printf("ME LLEGO %s \n", tematica);
 	tema* temaBus = buscarTema(tematica, listaTemas);
 	if (temaBus == NULL )
@@ -180,6 +181,8 @@ int procesarAlta(char* tematica, int puerto, struct sockaddr_in * cliente,
 	memcpy((void*) temaBus->suscriptores[cantSus]->cliente, (void*) cliente,
 			sizeof(struct sockaddr_in));
 	temaBus->suscriptores[cantSus]->cliente->sin_port = htons(puerto);
+	temaBus->suscriptores[cantSus]->cliente->sin_family = PF_INET;
+
 	temaBus->cantSuscript += 1;
 
 	return 1;
@@ -189,7 +192,7 @@ int procesarMensaje(char* tematica, char* mensaje, lista_temas* listaTemas) {
 
 	tema * temaBus = buscarTema(tematica, listaTemas);
 	if (temaBus == NULL ) {
-		printf("SE RECIBIO EL TEMA %s Y NO EXISTE", tematica);
+		printf("Se recibio el tema:  %s y no existe \n", tematica);
 		return -1;
 
 	}
@@ -198,14 +201,15 @@ int procesarMensaje(char* tematica, char* mensaje, lista_temas* listaTemas) {
 		enviarMensaje(tematica, mensaje, temaBus->suscriptores[i]->cliente);
 	}
 
-	printf("SE RECIBIO UN MENSAJE: \n TEMA: %s \n CON MENSAJE: %s \n", tematica,
-			mensaje);
+//	printf("SE RECIBIO UN MENSAJE: \n TEMA: %s \n CON MENSAJE: %s \n", tematica,
+//			mensaje);
 	return 1;
 
 }
 
 void enviarMensaje(char* tematica, char* mensaje, struct sockaddr_in * cliente) {
-	int s, longitudTematica, longitudMensaje;
+	int s, longitud;
+
 	if ((s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("error creando socket");
 		return;
@@ -217,15 +221,12 @@ void enviarMensaje(char* tematica, char* mensaje, struct sockaddr_in * cliente) 
 		close(s);
 		return;
 	}
-	longitudTematica = strlen(tematica) + 1;
-	longitudMensaje = strlen(mensaje) + 1;
-	char* mensajeAEnviar = malloc(
-			strlen(tematica) + strlen(mensaje) + 2 * sizeof(char));
-	memcpy((void*) mensajeAEnviar, (void*) tematica, longitudTematica);
-	memcpy((void*) mensajeAEnviar + longitudTematica, (void*) mensaje,
-			longitudMensaje);
+	char* argumentos[2];
+	argumentos[0] = tematica;
+	argumentos[1] = mensaje;
+	char* mensajeAEnviar = marshallMsg(MENSAJE, argumentos, 2, &longitud);
 
-	if (write(s, mensajeAEnviar, longitudMensaje + longitudTematica) < 0) {
+	if (write(s, mensajeAEnviar, longitud) < 0) {
 		perror("error en write");
 		close(s);
 		return;
@@ -304,11 +305,14 @@ int main(int argc, char *argv[]) {
 		}
 
 		notif notificacion = unMarshallMsg(mensaje);
+		//COPIO ESTRUCTURA DEL PEER------
+		struct sockaddr_in peer;
+		int tamanio = sizeof(peer);
 		if (notificacion->opt == ALTA || notificacion->opt == BAJA) {
-			notificacion->cliente = malloc(sizeof(dir_cliente));
-			memcpy((void*) notificacion->cliente, (void*) &dir_cliente,
-					sizeof(dir_cliente));
+			getpeername(s_conec, (void *) &peer, (socklen_t *) &tamanio);
+			notificacion->cliente = &peer;
 		}
+		//-------------------
 		resp = procesarNotificacion(notificacion, listaTemas);
 		memcpy((void *) mensajeRsp, (void*) &resp, sizeof(int));
 		mensajeRsp[4] = 0;
