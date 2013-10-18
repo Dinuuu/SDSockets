@@ -8,8 +8,7 @@
 #include "comun.h"
 
 typedef struct suscriptor {
-
-//Aca va la informacion para conectarse
+	struct sockaddr_in * cliente;
 
 } suscriptor;
 
@@ -34,9 +33,13 @@ int agregar_tema(lista_temas* temas, const char* tematica);
 void traza_estado(const char *mensaje, const char* port);
 tema* buscarTema(char* tema, lista_temas * listaTemas);
 int procesarNotificacion(notif notificacion, lista_temas* listaTemas);
-int procesarBaja(char* tematica, lista_temas * listaTemas);
-int procesarAlta(char* tematica, lista_temas* listaTemas);
+int procesarBaja(char* tematica, int puerto, struct sockaddr_in * cliente,
+		lista_temas * listaTemas);
+int procesarAlta(char* tematica, int puerto, struct sockaddr_in * cliente,
+		lista_temas* listaTemas);
 int procesarMensaje(char* tematica, char* mensaje, lista_temas* listaTemas);
+
+void enviarMensaje(char* tematica, char* mensaje, struct sockaddr_in * cliente);
 
 void traza_estado(const char *mensaje, const char* port) {
 	printf("\n------------------- %s --------------------\n", mensaje);
@@ -45,7 +48,6 @@ void traza_estado(const char *mensaje, const char* port) {
 	strcpy(comando, "netstat -at | grep ");
 	strcat(comando, port);
 	system(comando);
-//	system("netstat -at | grep 56789");
 	printf("---------------------------------------------------------\n\n");
 }
 
@@ -134,9 +136,11 @@ int procesarNotificacion(notif notificacion, lista_temas* listaTemas) {
 
 	switch (notificacion->opt) {
 	case BAJA:
-		return procesarBaja(notificacion->tema, listaTemas);
+		return procesarBaja(notificacion->tema, notificacion->puerto,
+				notificacion->cliente, listaTemas);
 	case ALTA:
-		return procesarAlta(notificacion->tema, listaTemas);
+		return procesarAlta(notificacion->tema, notificacion->puerto,
+				notificacion->cliente, listaTemas);
 
 	case MENSAJE:
 		return procesarMensaje(notificacion->tema, notificacion->mensaje,
@@ -145,7 +149,8 @@ int procesarNotificacion(notif notificacion, lista_temas* listaTemas) {
 	return -1;
 }
 
-int procesarBaja(char* tematica, lista_temas * listaTemas) {
+int procesarBaja(char* tematica, int puerto, struct sockaddr_in * cliente,
+		lista_temas * listaTemas) {
 
 	int i = 0;
 	tema * temaBus = buscarTema(tematica, listaTemas);
@@ -159,8 +164,9 @@ int procesarBaja(char* tematica, lista_temas * listaTemas) {
 	return -1;
 }
 
-int procesarAlta(char* tematica, lista_temas* listaTemas) {
-
+int procesarAlta(char* tematica, int puerto, struct sockaddr_in * cliente,
+		lista_temas* listaTemas) {
+	printf("ME LLEGO %s \n", tematica);
 	tema* temaBus = buscarTema(tematica, listaTemas);
 	if (temaBus == NULL )
 		return -1;
@@ -169,8 +175,12 @@ int procesarAlta(char* tematica, lista_temas* listaTemas) {
 		temaBus->suscriptores = realloc(temaBus->suscriptores,
 				(temaBus->cantSuscript + BLOQUE) * sizeof(suscript));
 	temaBus->suscriptores[cantSus] = malloc(sizeof(suscriptor));
+	temaBus->suscriptores[cantSus]->cliente = malloc(
+			sizeof(struct sockaddr_in));
+	memcpy((void*) temaBus->suscriptores[cantSus]->cliente, (void*) cliente,
+			sizeof(struct sockaddr_in));
+	temaBus->suscriptores[cantSus]->cliente->sin_port = htons(puerto);
 	temaBus->cantSuscript += 1;
-	//TODO AGREGAR EL SUSCRIPTOR A LA LISTA
 
 	return 1;
 }
@@ -183,11 +193,45 @@ int procesarMensaje(char* tematica, char* mensaje, lista_temas* listaTemas) {
 		return -1;
 
 	}
+	int i = 0;
+	for (i = 0; i < temaBus->cantSuscript; i++) {
+		enviarMensaje(tematica, mensaje, temaBus->suscriptores[i]->cliente);
+	}
 
 	printf("SE RECIBIO UN MENSAJE: \n TEMA: %s \n CON MENSAJE: %s \n", tematica,
 			mensaje);
 	return 1;
 
+}
+
+void enviarMensaje(char* tematica, char* mensaje, struct sockaddr_in * cliente) {
+	int s, longitudTematica, longitudMensaje;
+	if ((s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+		perror("error creando socket");
+		return;
+	}
+
+	if (connect(s, (struct sockaddr *) cliente, sizeof(struct sockaddr_in))
+			< 0) {
+		perror("error en connect");
+		close(s);
+		return;
+	}
+	longitudTematica = strlen(tematica) + 1;
+	longitudMensaje = strlen(mensaje) + 1;
+	char* mensajeAEnviar = malloc(
+			strlen(tematica) + strlen(mensaje) + 2 * sizeof(char));
+	memcpy((void*) mensajeAEnviar, (void*) tematica, longitudTematica);
+	memcpy((void*) mensajeAEnviar + longitudTematica, (void*) mensaje,
+			longitudMensaje);
+
+	if (write(s, mensajeAEnviar, longitudMensaje + longitudTematica) < 0) {
+		perror("error en write");
+		close(s);
+		return;
+	}
+	close(s);
+	return;
 }
 
 int main(int argc, char *argv[]) {
@@ -231,7 +275,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	if (listen(s, 5) < 0) {
+	if (listen(s, MAX_LISTEN) < 0) {
 		perror("error en listen");
 		close(s);
 		return 1;
@@ -240,6 +284,7 @@ int main(int argc, char *argv[]) {
 	traza_estado("Despu�s de listen", port);
 
 	while (1) {
+		mensajeLong = 0;
 		tam_dir = sizeof(dir_cliente);
 		if ((s_conec = accept(s, (struct sockaddr *) &dir_cliente, &tam_dir))
 				< 0) {
@@ -252,19 +297,24 @@ int main(int argc, char *argv[]) {
 
 		while ((leido = read(s_conec, buf, TAM)) > 0) {
 
-			mensaje = realloc(mensaje, mensajeLong + leido * sizeof(char));
+			mensaje = realloc(mensaje, (mensajeLong + leido) * sizeof(char));
 
-			memcpy((void*) mensaje, (void*) buf, leido);
-
+			memcpy((void*) (mensaje + mensajeLong), (void*) buf, leido);
+			mensajeLong += leido;
 		}
 
 		notif notificacion = unMarshallMsg(mensaje);
+		if (notificacion->opt == ALTA || notificacion->opt == BAJA) {
+			notificacion->cliente = malloc(sizeof(dir_cliente));
+			memcpy((void*) notificacion->cliente, (void*) &dir_cliente,
+					sizeof(dir_cliente));
+		}
 		resp = procesarNotificacion(notificacion, listaTemas);
 		memcpy((void *) mensajeRsp, (void*) &resp, sizeof(int));
 		mensajeRsp[4] = 0;
 
-		// TODO SE TRABA ACAAAAAAAAAAAAAA
 		if (write(s_conec, mensajeRsp, TAMANIO_RESPUESTA) < 0) {
+			free(mensaje);
 			perror("error en write");
 			close(s);
 			close(s_conec);

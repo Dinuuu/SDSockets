@@ -16,6 +16,8 @@ typedef struct notificacion {
 	int opt;
 	char* tema;
 	char* mensaje;
+	int puerto;
+	struct sockaddr_in * cliente;
 } notificacion;
 
 typedef notificacion * notif;

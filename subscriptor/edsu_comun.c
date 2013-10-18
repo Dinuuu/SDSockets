@@ -74,6 +74,14 @@ int enviarMensaje(int opt, ...) {
 	for (i = 0; i < argumentos; i++) {
 		argumento[i] = (char*) va_arg(ap,char*);
 	}
+	int puerto;
+	if (opt == BAJA || opt == ALTA) {
+		puerto = va_arg(ap,int);
+		char* numero = malloc(sizeof(int) + sizeof(char));
+		memcpy((void*) numero, (void*) &puerto, sizeof(int));
+		numero[sizeof(int)] = 0;
+		argumento[1] = numero;
+	}
 
 	mensaje = marshallMsg(opt, argumento, argumentos, &longitud);
 
@@ -83,6 +91,7 @@ int enviarMensaje(int opt, ...) {
 		free(mensaje);
 		return -1;
 	}
+	shutdown(s, SHUT_WR);
 	int leido = 0;
 	if ((leido = read(s, buf, TAMANIO_RESPUESTA)) < 0) {
 		perror("Error en read de respuesta");

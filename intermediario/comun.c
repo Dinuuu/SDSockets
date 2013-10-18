@@ -30,6 +30,16 @@ char* marshallMsg(const int opt, char ** argumento, int argumentos,
 		msg[(*longitud)] = 0;
 		*longitud += sizeof(char);
 	}
+
+	if (opt == BAJA || opt == ALTA) {
+		msg = realloc(msg,
+				(*longitud + sizeof(int) + sizeof(char)) * sizeof(char));
+		memcpy((void*) (msg + *longitud), (void*) argumento[i],
+				sizeof(int) + sizeof(char));
+		*longitud += sizeof(int) + sizeof(char);
+
+	}
+
 	return msg;
 }
 
@@ -37,7 +47,7 @@ notif unMarshallMsg(char* msg) {
 
 	notif resp = malloc(sizeof(notificacion));
 	int longitud = 0;
-	int longArgumento = 0	;
+	int longArgumento = 0;
 	memcpy((void *) &(resp->opt), (void *) msg, sizeof(int));
 	longitud += sizeof(int) + sizeof(char);
 	longArgumento = strlen(msg + longitud) + 1;
@@ -49,7 +59,11 @@ notif unMarshallMsg(char* msg) {
 		resp->mensaje = malloc(longArgumento);
 		memcpy((void*) resp->mensaje, (void*) (msg + longitud), longArgumento);
 
-	} else if (resp->opt != ALTA && resp->opt == BAJA) {
+	} else if (resp->opt == ALTA || resp->opt == BAJA) {
+		longArgumento = sizeof(int);
+		memcpy((void*) &(resp->puerto), (void*) (msg + longitud),
+				longArgumento);
+	} else {
 		free(resp->tema);
 		free(resp);
 		return NULL ;
