@@ -38,8 +38,8 @@ int procesarBaja(char* tematica, int puerto, struct sockaddr_in * cliente,
 int procesarAlta(char* tematica, int puerto, struct sockaddr_in * cliente,
 		lista_temas* listaTemas);
 int procesarMensaje(char* tematica, char* mensaje, lista_temas* listaTemas);
-
 void enviarMensaje(char* tematica, char* mensaje, struct sockaddr_in * cliente);
+int sonIguales(struct sockaddr_in * sock1, struct sockaddr_in * sock2);
 
 void traza_estado(const char *mensaje, const char* port) {
 	printf("\n------------------- %s --------------------\n", mensaje);
@@ -63,11 +63,13 @@ lista_temas* inicializar_temas(const char* archivo) {
 	int c;
 	while ((c = getc(file)) != -1) {
 		if (c == '\n') {
-			tematica[longitud] = '\0';
+			if (longitud > 0) {
+				tematica[longitud] = '\0';
 
-			agregar_tema(resp, tematica);
+				agregar_tema(resp, tematica);
 
-			longitud = 0;
+				longitud = 0;
+			}
 		} else {
 			if (longitud % BLOQUE == 0)
 				tematica = realloc(tematica,
@@ -75,6 +77,10 @@ lista_temas* inicializar_temas(const char* archivo) {
 			tematica[longitud++] = c;
 		}
 
+	}
+	if (longitud != 0) {
+		tematica[longitud] = '\0';
+		agregar_tema(resp, tematica);
 	}
 	free(tematica);
 	fclose(file);
@@ -132,6 +138,16 @@ void imprimir_tema(const tema* tema) {
 
 }
 
+int sonIguales(struct sockaddr_in * sock1, struct sockaddr_in * sock2) {
+
+	if ((sock1->sin_port == sock2->sin_port)
+	/*&& (strcmp((char*) sock1->sin_addr.s_addr,
+	 (char*) sock2->sin_addr.s_addr) == 0)*/) {
+		return 1;
+	}
+	return 0;
+}
+
 int procesarNotificacion(notif notificacion, lista_temas* listaTemas) {
 
 	switch (notificacion->opt) {
@@ -152,13 +168,19 @@ int procesarNotificacion(notif notificacion, lista_temas* listaTemas) {
 int procesarBaja(char* tematica, int puerto, struct sockaddr_in * cliente,
 		lista_temas * listaTemas) {
 
+	cliente->sin_port = htons(puerto);
+	cliente->sin_family = PF_INET;
 	int i = 0;
 	tema * temaBus = buscarTema(tematica, listaTemas);
 	if (temaBus == NULL )
 		return -1;
 	for (i = 0; i < temaBus->cantSuscript; i++) {
-		//TODO BUSCAR SUSCRIPTOR SI NO EXISTE DEVOLVER ERROR;
-		temaBus->cantSuscript--;
+		if (sonIguales(cliente, temaBus->suscriptores[i]->cliente)) {
+			free(temaBus->suscriptores[i]->cliente);
+			free(temaBus->suscriptores[i]);
+			temaBus->cantSuscript--;
+			return 1;
+		}
 	}
 
 	return -1;
@@ -167,7 +189,6 @@ int procesarBaja(char* tematica, int puerto, struct sockaddr_in * cliente,
 int procesarAlta(char* tematica, int puerto, struct sockaddr_in * cliente,
 		lista_temas* listaTemas) {
 
-	printf("ME LLEGO %s \n", tematica);
 	tema* temaBus = buscarTema(tematica, listaTemas);
 	if (temaBus == NULL )
 		return -1;
@@ -201,8 +222,6 @@ int procesarMensaje(char* tematica, char* mensaje, lista_temas* listaTemas) {
 		enviarMensaje(tematica, mensaje, temaBus->suscriptores[i]->cliente);
 	}
 
-//	printf("SE RECIBIO UN MENSAJE: \n TEMA: %s \n CON MENSAJE: %s \n", tematica,
-//			mensaje);
 	return 1;
 
 }
@@ -244,7 +263,7 @@ int main(int argc, char *argv[]) {
 	int portInt = atoi(port);
 	char* archivo = argv[2];
 	lista_temas* listaTemas = inicializar_temas(archivo);
-	imprimir_temas(listaTemas);
+	//imprimir_temas(listaTemas);
 
 	int s, s_conec, leido;
 	unsigned int tam_dir;
@@ -282,7 +301,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	traza_estado("Despu�s de listen", port);
+	//traza_estado("Despu�s de listen", port);
 
 	while (1) {
 		mensajeLong = 0;
@@ -294,7 +313,7 @@ int main(int argc, char *argv[]) {
 			return 1;
 		}
 
-		traza_estado("Despu�s de accept", port);
+		//traza_estado("Despu�s de accept", port);
 
 		while ((leido = read(s_conec, buf, TAM)) > 0) {
 
@@ -305,14 +324,12 @@ int main(int argc, char *argv[]) {
 		}
 
 		notif notificacion = unMarshallMsg(mensaje);
-		//COPIO ESTRUCTURA DEL PEER------
 		struct sockaddr_in peer;
 		int tamanio = sizeof(peer);
 		if (notificacion->opt == ALTA || notificacion->opt == BAJA) {
 			getpeername(s_conec, (void *) &peer, (socklen_t *) &tamanio);
 			notificacion->cliente = &peer;
 		}
-		//-------------------
 		resp = procesarNotificacion(notificacion, listaTemas);
 		memcpy((void *) mensajeRsp, (void*) &resp, sizeof(int));
 		mensajeRsp[4] = 0;
@@ -326,7 +343,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		close(s_conec);
-		traza_estado("Despu�s de close de conexi�n", port);
+		//traza_estado("Despu�s de close de conexi�n", port);
 
 	}
 
