@@ -180,7 +180,7 @@ int procesarBaja(char* tematica, int puerto, struct sockaddr_in * cliente,
 			temaBus->cantSuscript--;
 			temaBus->suscriptores[i] =
 					temaBus->suscriptores[temaBus->cantSuscript];
-			return 1;
+			return 0;
 		}
 	}
 
@@ -190,10 +190,21 @@ int procesarBaja(char* tematica, int puerto, struct sockaddr_in * cliente,
 int procesarAlta(char* tematica, int puerto, struct sockaddr_in * cliente,
 		lista_temas* listaTemas) {
 
+	struct sockaddr_in aux;
+	memcpy((void *) &aux, (void*) cliente, sizeof(aux));
+	aux.sin_port = htons(puerto);
+	aux.sin_family = PF_INET;
+
 	tema* temaBus = buscarTema(tematica, listaTemas);
 	if (temaBus == NULL )
 		return -1;
 	int cantSus = temaBus->cantSuscript;
+	int i = 0;
+	for (i = 0; i < temaBus->cantSuscript; i++) {
+		if (sonIguales(temaBus->suscriptores[i]->cliente, &aux))
+			return -1;
+	}
+
 	if (cantSus % BLOQUE == 0)
 		temaBus->suscriptores = realloc(temaBus->suscriptores,
 				(temaBus->cantSuscript + BLOQUE) * sizeof(suscript));
@@ -207,7 +218,7 @@ int procesarAlta(char* tematica, int puerto, struct sockaddr_in * cliente,
 
 	temaBus->cantSuscript += 1;
 
-	return 1;
+	return 0;
 }
 
 int procesarMensaje(char* tematica, char* mensaje, lista_temas* listaTemas) {
@@ -223,7 +234,7 @@ int procesarMensaje(char* tematica, char* mensaje, lista_temas* listaTemas) {
 		enviarMensaje(tematica, mensaje, temaBus->suscriptores[i]->cliente);
 	}
 
-	return 1;
+	return 0;
 
 }
 

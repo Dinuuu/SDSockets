@@ -10,13 +10,15 @@
 #include <malloc.h>
 #include <pthread.h>
 
-int puerto;
+int puerto= 0;
 
 static void (*notifi)(const char*, const char*);
 
 void* bucleAccept(void* socket);
 
 int alta_subscripcion_tema(const char *tema) {
+	if(puerto == 0 )
+		return -1;
 	return enviarMensaje(ALTA, tema, puerto);
 }
 
