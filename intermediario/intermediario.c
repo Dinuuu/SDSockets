@@ -141,8 +141,7 @@ void imprimir_tema(const tema* tema) {
 int sonIguales(struct sockaddr_in * sock1, struct sockaddr_in * sock2) {
 
 	if ((sock1->sin_port == sock2->sin_port)
-	/*&& (strcmp((char*) sock1->sin_addr.s_addr,
-	 (char*) sock2->sin_addr.s_addr) == 0)*/) {
+			&& (sock1->sin_addr.s_addr == sock2->sin_addr.s_addr)) {
 		return 1;
 	}
 	return 0;
@@ -179,6 +178,8 @@ int procesarBaja(char* tematica, int puerto, struct sockaddr_in * cliente,
 			free(temaBus->suscriptores[i]->cliente);
 			free(temaBus->suscriptores[i]);
 			temaBus->cantSuscript--;
+			temaBus->suscriptores[i] =
+					temaBus->suscriptores[temaBus->cantSuscript];
 			return 1;
 		}
 	}
@@ -285,7 +286,6 @@ int main(int argc, char *argv[]) {
 		perror("error en setsockopt");
 		return 1;
 	}
-
 	dir.sin_addr.s_addr = INADDR_ANY;
 	dir.sin_port = htons(portInt);
 	dir.sin_family = PF_INET;

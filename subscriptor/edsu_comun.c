@@ -98,7 +98,6 @@ int enviarMensaje(int opt, ...) {
 	}
 
 	memcpy((void *) &rpta, (void*) buf, sizeof(int));
-	rpta = 1;
 	close(s);
 	free(mensaje);
 	return rpta;

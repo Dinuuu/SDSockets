@@ -65,14 +65,14 @@ int inicio_subscriptor(void (*notif_evento)(const char *, const char *),
 	getsockname(s, (void*) &aux, (socklen_t *) &tam);
 
 	puerto = ntohs(aux.sin_port);
-	pthread_create(&threadId, NULL, bucleAccept, &s);
+	pthread_create(&threadId, NULL, bucleAccept, (void*) s);
 
 	return 0;
 }
 
 void* bucleAccept(void* socket) {
 
-	int * socketNum = socket;
+	int socketNum = (int) socket;
 	int s_conec, leido;
 	unsigned int tam_dir;
 	struct sockaddr_in dir_cliente;
@@ -81,10 +81,10 @@ void* bucleAccept(void* socket) {
 	int mensajeLong = 0;
 	while (1) {
 		tam_dir = sizeof(dir_cliente);
-		if ((s_conec = accept(*socketNum, (struct sockaddr *) &dir_cliente,
+		if ((s_conec = accept(socketNum, (struct sockaddr *) &dir_cliente,
 				&tam_dir)) < 0) {
 			perror("error en accept");
-			close(*socketNum);
+			close(socketNum);
 			pthread_exit(NULL );
 
 			return NULL ;
@@ -103,7 +103,7 @@ void* bucleAccept(void* socket) {
 
 		if (leido < 0) {
 			perror("error en read");
-			close(*socketNum);
+			close(socketNum);
 			close(s_conec);
 			pthread_exit(NULL );
 			return NULL ;
@@ -111,7 +111,7 @@ void* bucleAccept(void* socket) {
 		close(s_conec);
 	}
 
-	close(*socketNum);
+	close(socketNum);
 	pthread_exit(NULL );
 	return NULL ;
 }
