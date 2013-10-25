@@ -64,23 +64,28 @@ int enviarMensaje(int opt, ...) {
 		argumentos = 2;
 		break;
 	case BAJA:
+	case ALTA:
+	case CREAR:
+	case ELIMINAR:
 		argumentos = 1;
 		break;
-	case ALTA:
-		argumentos = 1;
+	case INICIO:
+	case APAGADO:
+		argumentos = 0;
 		break;
 	}
+
 	argumento = malloc(argumentos * sizeof(char*));
 	for (i = 0; i < argumentos; i++) {
 		argumento[i] = (char*) va_arg(ap,char*);
 	}
 	int puerto;
-	if (opt == BAJA || opt == ALTA) {
+	if (opt == BAJA || opt == ALTA || opt == APAGADO || opt == INICIO) {
 		puerto = va_arg(ap,int);
 		char* numero = malloc(sizeof(int) + sizeof(char));
 		memcpy((void*) numero, (void*) &puerto, sizeof(int));
 		numero[sizeof(int)] = 0;
-		argumento[1] = numero;
+		argumento[argumentos] = numero;
 	}
 
 	mensaje = marshallMsg(opt, argumento, argumentos, &longitud);

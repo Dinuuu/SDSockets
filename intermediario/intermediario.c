@@ -7,6 +7,8 @@
 #include <malloc.h>
 #include "comun.h"
 
+#define META_TEMA_INICIAL "__CREACION Y ELIMINACION__"
+
 typedef struct suscriptor {
 	struct sockaddr_in * cliente;
 
@@ -38,9 +40,15 @@ int procesarBaja(char* tematica, int puerto, struct sockaddr_in * cliente,
 int procesarAlta(char* tematica, int puerto, struct sockaddr_in * cliente,
 		lista_temas* listaTemas);
 int procesarMensaje(char* tematica, char* mensaje, lista_temas* listaTemas);
-void enviarMensaje(char* tematica, char* mensaje, struct sockaddr_in * cliente);
+void enviarMensaje(int opt, char** argumentos, int cantArgumentos,
+		struct sockaddr_in * cliente);
 int sonIguales(struct sockaddr_in * sock1, struct sockaddr_in * sock2);
-
+int procesarApagado(int puerto, struct sockaddr_in * cliente,
+		lista_temas * temas);
+int procesarCreacion(char * tematica, lista_temas* temas);
+int procesarEliminacion(char* tematica, lista_temas* temas);
+int procesarInicio(int puerto, struct sockaddr_in * cliente,
+		lista_temas * temas);
 void traza_estado(const char *mensaje, const char* port) {
 	printf("\n------------------- %s --------------------\n", mensaje);
 	system("netstat -at | head -2 | tail -1");
@@ -84,6 +92,7 @@ lista_temas* inicializar_temas(const char* archivo) {
 	}
 	free(tematica);
 	fclose(file);
+	agregar_tema(resp, META_TEMA_INICIAL);
 	return resp;
 }
 
@@ -160,8 +169,82 @@ int procesarNotificacion(notif notificacion, lista_temas* listaTemas) {
 	case MENSAJE:
 		return procesarMensaje(notificacion->tema, notificacion->mensaje,
 				listaTemas);
+	case APAGADO:
+		return procesarApagado(notificacion->puerto, notificacion->cliente,
+				listaTemas);
+	case CREAR:
+		return procesarCreacion(notificacion->tema, listaTemas);
+	case ELIMINAR:
+		return procesarEliminacion(notificacion->tema, listaTemas);
+	case INICIO:
+		return procesarInicio(notificacion->puerto, notificacion->cliente,
+				listaTemas);
 	}
 	return -1;
+}
+
+int procesarInicio(int puerto, struct sockaddr_in * cliente,
+		lista_temas * temas) {
+	return procesarAlta(META_TEMA_INICIAL, puerto, cliente, temas);
+}
+
+int procesarCreacion(char * tematica, lista_temas* temas) {
+	tema* existe = buscarTema(tematica, temas);
+	if (existe != NULL )
+		return -1;
+	tema * temaBus = buscarTema(META_TEMA_INICIAL, temas);
+	int i = 0;
+	char* argumentos[1];
+	argumentos[0] = tematica;
+	for (i = 0; i < temaBus->cantSuscript; i++) {
+		enviarMensaje(CREAR, argumentos, 1, temaBus->suscriptores[i]->cliente);
+	}
+
+	agregar_tema(temas, tematica);
+
+	return 1;
+}
+
+int procesarEliminacion(char* tematica, lista_temas* temas) {
+
+	int i = 0, encontrado = -1;
+	for (i = 0; i < temas->cant_temas && encontrado < 0; i++) {
+		if (strcmp(temas->temas[i]->tema, tematica) == 0) {
+			encontrado = i;
+		}
+	}
+	if (i == -1)
+		return -1;
+
+	char* argumentos[1];
+	argumentos[0] = tematica;
+
+	tema * temaBus = buscarTema(META_TEMA_INICIAL, temas);
+
+	for (i = 0; i < temaBus->cantSuscript; i++) {
+		enviarMensaje(ELIMINAR, argumentos, 1,
+				temaBus->suscriptores[i]->cliente);
+	}
+
+	for (i = 0; i < temas->temas[encontrado]->cantSuscript; i++) {
+		free(temas->temas[encontrado]->suscriptores[i]->cliente);
+	}
+	free(temas->temas[encontrado]->suscriptores);
+	free(temas->temas[encontrado]->tema);
+	free(temas->temas[encontrado]);
+	temas->cant_temas -= 1;
+	temas->temas[encontrado] = temas->temas[temas->cant_temas];
+	return 1;
+}
+
+int procesarApagado(int puerto, struct sockaddr_in * cliente,
+		lista_temas * temas) {
+	int i = 0;
+
+	for (i = 0; i < temas->cant_temas; i++) {
+		procesarBaja(temas->temas[i]->tema, puerto, cliente, temas);
+	}
+	return 0;
 }
 
 int procesarBaja(char* tematica, int puerto, struct sockaddr_in * cliente,
@@ -230,15 +313,20 @@ int procesarMensaje(char* tematica, char* mensaje, lista_temas* listaTemas) {
 
 	}
 	int i = 0;
+	char* argumentos[2];
+	argumentos[0] = tematica;
+	argumentos[1] = mensaje;
 	for (i = 0; i < temaBus->cantSuscript; i++) {
-		enviarMensaje(tematica, mensaje, temaBus->suscriptores[i]->cliente);
+		enviarMensaje(MENSAJE, argumentos, 2,
+				temaBus->suscriptores[i]->cliente);
 	}
 
 	return 0;
 
 }
 
-void enviarMensaje(char* tematica, char* mensaje, struct sockaddr_in * cliente) {
+void enviarMensaje(int opt, char** argumentos, int cantArgumentos,
+		struct sockaddr_in * cliente) {
 	int s, longitud;
 
 	if ((s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
@@ -252,10 +340,9 @@ void enviarMensaje(char* tematica, char* mensaje, struct sockaddr_in * cliente) 
 		close(s);
 		return;
 	}
-	char* argumentos[2];
-	argumentos[0] = tematica;
-	argumentos[1] = mensaje;
-	char* mensajeAEnviar = marshallMsg(MENSAJE, argumentos, 2, &longitud);
+
+	char* mensajeAEnviar = marshallMsg(opt, argumentos, cantArgumentos,
+			&longitud);
 
 	if (write(s, mensajeAEnviar, longitud) < 0) {
 		perror("error en write");
@@ -275,7 +362,7 @@ int main(int argc, char *argv[]) {
 	int portInt = atoi(port);
 	char* archivo = argv[2];
 	lista_temas* listaTemas = inicializar_temas(archivo);
-	//imprimir_temas(listaTemas);
+//imprimir_temas(listaTemas);
 
 	int s, s_conec, leido;
 	unsigned int tam_dir;
@@ -312,7 +399,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	//traza_estado("Despu�s de listen", port);
+//traza_estado("Despu�s de listen", port);
 
 	while (1) {
 		mensajeLong = 0;
@@ -337,7 +424,8 @@ int main(int argc, char *argv[]) {
 		notif notificacion = unMarshallMsg(mensaje);
 		struct sockaddr_in peer;
 		int tamanio = sizeof(peer);
-		if (notificacion->opt == ALTA || notificacion->opt == BAJA) {
+		if (notificacion->opt == ALTA || notificacion->opt == BAJA
+				|| notificacion->opt == INICIO || notificacion->opt == APAGADO) {
 			getpeername(s_conec, (void *) &peer, (socklen_t *) &tamanio);
 			notificacion->cliente = &peer;
 		}

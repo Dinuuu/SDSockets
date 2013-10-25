@@ -9,15 +9,31 @@
 #include <stdlib.h>
 #include <malloc.h>
 #include <pthread.h>
+#include <signal.h>
 
-int puerto= 0;
+int puerto = 0;
+pthread_t threadId = 0;
 
 static void (*notifi)(const char*, const char*);
+static void (*notifi_alta)(const char*);
+static void (*notifi_baja)(const char*);
 
 void* bucleAccept(void* socket);
 
+int fin_subscriptor() {
+	if (puerto == 0)
+		return -1;
+	int resp, kill;
+	resp = enviarMensaje(APAGADO, puerto);
+	kill = pthread_kill(threadId, SIGTERM);
+	if (resp == 0 && kill == 0)
+		return 0;
+	else
+		return -1;
+}
+
 int alta_subscripcion_tema(const char *tema) {
-	if(puerto == 0 )
+	if (puerto == 0)
 		return -1;
 	return enviarMensaje(ALTA, tema, puerto);
 }
@@ -29,7 +45,8 @@ int baja_subscripcion_tema(const char *tema) {
 int inicio_subscriptor(void (*notif_evento)(const char *, const char *),
 		void (*alta_tema)(const char *), void (*baja_tema)(const char *)) {
 	notifi = notif_evento;
-
+	notifi_alta = alta_tema;
+	notifi_baja = baja_tema;
 	int s;
 	struct sockaddr_in dir;
 	int opcion = 1;
@@ -60,13 +77,14 @@ int inicio_subscriptor(void (*notif_evento)(const char *, const char *),
 		close(s);
 		return 1;
 	}
-	pthread_t threadId;
 
 	struct sockaddr_in aux;
 	int tam = sizeof(aux);
 	getsockname(s, (void*) &aux, (socklen_t *) &tam);
 
 	puerto = ntohs(aux.sin_port);
+	if (enviarMensaje(INICIO, puerto) < 0)
+		return -1;
 	pthread_create(&threadId, NULL, bucleAccept, (void*) s);
 
 	return 0;
@@ -101,7 +119,18 @@ void* bucleAccept(void* socket) {
 		}
 
 		notif notificacion = unMarshallMsg(mensaje);
-		(*notifi)(notificacion->tema, notificacion->mensaje);
+		switch (notificacion->opt) {
+
+		case MENSAJE:
+			(*notifi)(notificacion->tema, notificacion->mensaje);
+			break;
+		case CREAR:
+			(*notifi_alta)(notificacion->tema);
+			break;
+		case ELIMINAR:
+			(*notifi_baja)(notificacion->tema);
+			break;
+		}
 
 		if (leido < 0) {
 			perror("error en read");
@@ -116,9 +145,5 @@ void* bucleAccept(void* socket) {
 	close(socketNum);
 	pthread_exit(NULL );
 	return NULL ;
-}
-
-int fin_subscriptor() {
-	return 0;
 }
 

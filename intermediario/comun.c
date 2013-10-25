@@ -31,7 +31,7 @@ char* marshallMsg(const int opt, char ** argumento, int argumentos,
 		*longitud += sizeof(char);
 	}
 
-	if (opt == BAJA || opt == ALTA) {
+	if (opt == BAJA || opt == ALTA || opt == APAGADO || opt == INICIO) {
 		msg = realloc(msg,
 				(*longitud + sizeof(int) + sizeof(char)) * sizeof(char));
 		memcpy((void*) (msg + *longitud), (void*) argumento[i],
@@ -48,8 +48,16 @@ notif unMarshallMsg(char* msg) {
 	notif resp = malloc(sizeof(notificacion));
 	int longitud = 0;
 	int longArgumento = 0;
+
 	memcpy((void *) &(resp->opt), (void *) msg, sizeof(int));
 	longitud += sizeof(int) + sizeof(char);
+	if (resp->opt == APAGADO || resp->opt == INICIO) {
+		memcpy((void *) &(resp->puerto), (void *) msg + longitud, sizeof(int));
+		longitud += sizeof(int) + sizeof(char);
+		longArgumento = strlen(msg + longitud) + 1;
+		return resp;
+	}
+
 	longArgumento = strlen(msg + longitud) + 1;
 	resp->tema = malloc(longArgumento);
 	memcpy((void*) resp->tema, (void*) (msg + longitud), longArgumento);
@@ -63,10 +71,11 @@ notif unMarshallMsg(char* msg) {
 		longArgumento = sizeof(int);
 		memcpy((void*) &(resp->puerto), (void*) (msg + longitud),
 				longArgumento);
-	} else {
+	} else if (resp->opt != CREAR && resp->opt != ELIMINAR) {
 		free(resp->tema);
 		free(resp);
 		return NULL ;
 	}
+
 	return resp;
 }

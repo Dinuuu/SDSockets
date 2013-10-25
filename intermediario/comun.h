@@ -11,7 +11,10 @@
 #define ALTA 1
 #define BAJA 2
 #define MENSAJE 3
-
+#define APAGADO 4
+#define CREAR 5
+#define ELIMINAR 6
+#define INICIO 7
 typedef struct notificacion {
 	int opt;
 	char* tema;
