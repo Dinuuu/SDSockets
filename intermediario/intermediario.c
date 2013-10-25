@@ -213,7 +213,7 @@ int procesarEliminacion(char* tematica, lista_temas* temas) {
 			encontrado = i;
 		}
 	}
-	if (i == -1)
+	if (encontrado == -1)
 		return -1;
 
 	char* argumentos[1];
