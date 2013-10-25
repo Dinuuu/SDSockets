@@ -24,9 +24,11 @@ void* bucleAccept(void* socket);
 int fin_subscriptor() {
 	if (puerto == 0)
 		return -1;
-	int resp, kill;
-	resp = enviarMensaje(APAGADO, puerto);
-	close(socket);
+	enviarMensaje(APAGADO, puerto);
+	close(socketAbierto);
+	socketAbierto = 0;
+	puerto = 0;
+	threadId = 0;
 	return 0;
 }
 
