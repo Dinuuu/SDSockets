@@ -13,6 +13,7 @@
 
 static int puerto = 0;
 static pthread_t threadId = 0;
+static int socketAbierto = 0;
 
 static void (*notifi)(const char*, const char*);
 static void (*notifi_alta)(const char*);
@@ -25,11 +26,8 @@ int fin_subscriptor() {
 		return -1;
 	int resp, kill;
 	resp = enviarMensaje(APAGADO, puerto);
-	kill = pthread_kill(threadId, SIGTERM);
-	if (resp == 0 && kill == 0)
-		return 0;
-	else
-		return -1;
+	close(socket);
+	return 0;
 }
 
 int alta_subscripcion_tema(const char *tema) {
@@ -87,6 +85,7 @@ int inicio_subscriptor(void (*notif_evento)(const char *, const char *),
 	getsockname(s, (void*) &aux, (socklen_t *) &tam);
 
 	puerto = ntohs(aux.sin_port);
+	socketAbierto = s;
 	if (enviarMensaje(INICIO, puerto) < 0)
 		return -1;
 	pthread_create(&threadId, NULL, bucleAccept, (void*) s);
