@@ -11,8 +11,8 @@
 #include <pthread.h>
 #include <signal.h>
 
-int puerto = 0;
-pthread_t threadId = 0;
+static int puerto = 0;
+static pthread_t threadId = 0;
 
 static void (*notifi)(const char*, const char*);
 static void (*notifi_alta)(const char*);
@@ -44,6 +44,10 @@ int baja_subscripcion_tema(const char *tema) {
 
 int inicio_subscriptor(void (*notif_evento)(const char *, const char *),
 		void (*alta_tema)(const char *), void (*baja_tema)(const char *)) {
+
+	if (puerto != 0)
+		return -1;
+
 	notifi = notif_evento;
 	notifi_alta = alta_tema;
 	notifi_baja = baja_tema;
